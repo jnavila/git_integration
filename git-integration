@@ -1,0 +1,44 @@
+#!/bin/bash
+
+build_cmd=$(git config integration.cmd)
+
+if [ -z "$build_cmd" ]; then
+    echo "please define config integration.cmd"
+    exit 1;
+fi
+
+workinghead=$(git symbolic-ref HEAD 2> /dev/null | cut -b 12-)
+
+if [ -n $(which git-test-sequence) ]; then
+    sequence_origin=$(git config integration.origin)
+fi
+
+PRIVATE_BUILD=$(git rev-parse --show-toplevel)/.privatebuild
+
+if [ ! -d "$PRIVATE_BUILD" ]; then
+  git clone . "$PRIVATE_BUILD"
+fi
+
+cd "$PRIVATE_BUILD"
+git clean -df
+git fetch origin
+
+
+if [ -n "$sequence_origin" ]; then
+    git-test-sequence ${sequence_origin}..origin/$workinghead "$build_cmd"
+else
+    git checkout origin/$workinghead && exec $build_cmd
+fi 
+
+if [ $? -eq 0 ]; then
+    tput setaf 2
+    echo "Integration OK"
+    tput sgr0
+else
+    tput bold; tput setaf 1
+    echo "Integration Failed!"
+    tput sgr0
+    exit $?
+fi
+
+cd -

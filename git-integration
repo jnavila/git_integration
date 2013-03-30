@@ -1,5 +1,15 @@
 #!/bin/bash
 
+usage(){
+	echo "Usage: $0"
+	exit 1
+}
+
+if [ -z $(which git-test-sequence) ]; then
+    echo "git-test-sequence must be installed"
+    exit 1;    
+fi
+
 build_cmd=$(git config integration.cmd)
 
 if [ -z "$build_cmd" ]; then
@@ -7,11 +17,13 @@ if [ -z "$build_cmd" ]; then
     exit 1;
 fi
 
-workinghead=$(git symbolic-ref HEAD 2> /dev/null | cut -b 12-)
-
-if [ -n $(which git-test-sequence) ]; then
-    sequence_origin=$(git config integration.origin)
+sequence_origin=$(git config integration.origin)
+if [ -z "$sequence_origin" ]; then
+    echo "please define config integration.origin"
+    exit 1;
 fi
+    
+workinghead=$(git symbolic-ref HEAD 2> /dev/null | cut -b 12-)
 
 PRIVATE_BUILD=$(git rev-parse --show-toplevel)/.privatebuild
 
@@ -23,12 +35,7 @@ cd "$PRIVATE_BUILD"
 git clean -df
 git fetch origin
 
-
-if [ -n "$sequence_origin" ]; then
-    git-test-sequence ${sequence_origin}..origin/$workinghead "$build_cmd"
-else
-    git checkout origin/$workinghead && exec $build_cmd
-fi 
+git-test-sequence origin/${sequence_origin}..origin/$workinghead "$build_cmd"
 
 if [ $? -eq 0 ]; then
     tput setaf 2

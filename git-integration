@@ -5,13 +5,7 @@ usage(){
 	exit 1
 }
 
-if [ -z $(which git-test-sequence) ]; then
-    echo "git-test-sequence must be installed"
-    exit 1;    
-fi
-
 build_cmd=$(git config integration.cmd)
-
 if [ -z "$build_cmd" ]; then
     echo "please define config integration.cmd"
     exit 1;
@@ -35,9 +29,40 @@ cd "$PRIVATE_BUILD"
 git clean -df
 git fetch origin
 
-git-test-sequence origin/${sequence_origin}..origin/$workinghead "$build_cmd"
+already_passed() {
+    obdata=$t-$1
+    obhash=`echo $obdata | git hash-object --stdin`
+    git cat-file blob $obhash > /dev/null 2>/dev/null \
+        && echo "Already ${ref_name} $1"
+}
 
-if [ $? -eq 0 ]; then
+passed_on() {
+    obdata=$t-$1
+    echo $obdata | git hash-object -w --stdin > /dev/null
+    echo "Passed: $1."
+}
+
+broke_on() {
+    echo "Broke on $1"
+    status=1
+    return 1
+}
+
+new_test() {
+    echo "Testing $2"
+    git reset --hard $v && git clean -df && eval "$2" && passed_on $1 || broke_on $v
+    return $?
+}
+
+t=`echo "$build_cmd" | git hash-object --stdin`
+status=0
+for v in $(git rev-list --reverse origin/${sequence_origin}..origin/${workinghead})
+do
+    tree_ver=`git rev-parse "$v^{tree}"`
+    already_passed $tree_ver || new_test $tree_ver "$build_cmd" || break
+done
+
+if [ $status -eq 0 ]; then
     tput setaf 2
     echo "Integration OK"
     tput sgr0

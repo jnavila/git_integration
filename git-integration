@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Runs tests on all commits of a branch independently of working dir
+# Copyright (C) 2013 Jean-Noël AVILA
+# Licensed under the terms of the GNU General Public License version 2 (only).
+# See the file COPYING for details.
+
 usage(){
 	echo "Usage: $0"
 	exit 1

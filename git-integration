@@ -10,13 +10,32 @@ usage(){
 	exit 1
 }
 
-build_cmd=$(git config integration.cmd)
+
+while getopts "c:o:" opt; do
+  case $opt in
+    c)
+      build_cmd="$OPTARG"
+      ;;
+    o)
+      sequence_origin="$OPTARG"
+      ;;
+    :)
+      echo "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+    \?)
+      exit 1
+      ;;
+  esac
+done
+
+[ -n "$build_cmd" ] || build_cmd=$(git config integration.cmd)
 if [ -z "$build_cmd" ]; then
     echo "please define config integration.cmd"
     exit 1;
 fi
 
-sequence_origin=$(git config integration.origin)
+[ -n "$sequence_origin" ] || sequence_origin=$(git config integration.origin)
 if [ -z "$sequence_origin" ]; then
     echo "please define config integration.origin"
     exit 1;

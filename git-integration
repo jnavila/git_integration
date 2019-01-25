@@ -10,14 +10,14 @@ cat <<EOF
  usage : git integration [-m] [-c <cmd>] [-o <origin>]
 
     -h                    shows this text
-    -m                    test the merge with the origin branch
+    -m <branch>           test the merge with <branch>
     -c <cmd>              override the integration test command with <cmd>
-    -o <origin>           override the origin branch with <origin>
+    -o <origin>           override the origin branches with <origin>
 
 EOF
 }
 
-while getopts "c:hmo:" opt; do
+while getopts "c:hm:o:" opt; do
   case $opt in
     c)
       build_cmd="$OPTARG"
@@ -27,7 +27,8 @@ while getopts "c:hmo:" opt; do
       exit 0
       ;;
     m)
-      try_merge=1
+        try_merge=1
+        merge_target="$OPTARG"
       ;;
     o)
       sequence_origin="$OPTARG"
@@ -46,13 +47,13 @@ done
 
 [ -n "$build_cmd" ] || build_cmd=$(git config integration.cmd)
 if [ -z "$build_cmd" ]; then
-    echo "please define config integration.cmd"
+    echo "please define config integration.cmd as a full command to build and test the project"
     exit 1;
 fi
 
 [ -n "$sequence_origin" ] || sequence_origin=$(git config integration.origin)
 if [ -z "$sequence_origin" ]; then
-    echo "please define config integration.origin"
+    echo "please define config integration.origin as a space separated list of unwanted branches"
     exit 1;
 fi
 
@@ -61,56 +62,62 @@ workinghead=$(git symbolic-ref HEAD 2> /dev/null | cut -b 12-)
 PRIVATE_BUILD=$(git rev-parse --show-toplevel)/.privatebuild
 
 if [ ! -d "$PRIVATE_BUILD" ]; then
-  git clone . "$PRIVATE_BUILD" >/dev/null
+  git worktree add --detach "$PRIVATE_BUILD">/dev/null
 fi
 
 cd "$PRIVATE_BUILD"
 git clean -df
-git fetch origin >/dev/null 2>/dev/null
 
 already_passed() {
     obdata=$t-$1
     obhash=`echo $obdata | git hash-object --stdin`
     git cat-file blob $obhash > /dev/null 2>/dev/null \
-        && echo "Already $commit_title"
+        && tput setaf 2 && echo "Already $commit_title" && tput sgr0
 }
 
 passed_on() {
     obdata=$t-$1
     echo $obdata | git hash-object -w --stdin > /dev/null
-    echo "Passed: $commit_title"
+    tput setaf 2
+    echo "Passed: $2"
+    tput sgr0
+    return 0
 }
 
 broke_on() {
-    echo "Broke on $commit_title"
+    echo "Broke on $1"
     status=1
     return 1
 }
 
 new_test() {
-    (git reset --hard $v > /dev/null 2>/dev/null) && git clean -df && eval "$2" && passed_on $1 || broke_on $v
+    cd $(git rev-parse --show-toplevel)
+    (git reset --hard $4 > /dev/null 2>/dev/null) && git clean -df && eval "$2" && passed_on "$1" "$3" || broke_on "$3"
     return $?
 }
 
-echo "Testing $build_cmd on ${sequence_origin}..${workinghead}"
+sequence_exclude=$(for s in $sequence_origin; do echo -n "^${s} "; done)
+echo "Testing $build_cmd"
+tput setaf 3
+echo "on ${sequence_exclude} ${workinghead}"
+tput sgr0
 t=`echo "$build_cmd" | git hash-object --stdin`
 status=0
-for v in $(git rev-list --reverse origin/${sequence_origin}..origin/${workinghead})
+for v in $(git rev-list --reverse ${sequence_exclude} ${workinghead})
 do
     tree_ver=`git rev-parse "$v^{tree}"`
     commit_title=$(git log --oneline -1 $v)
-    already_passed $tree_ver || new_test $tree_ver "$build_cmd" || break
+    already_passed $tree_ver "[$tree_ver] $commit_title" || new_test $tree_ver "$build_cmd" "$commit_title" $v || break
 done
 if [ "2$try_merge" -eq 21  ]; then
     echo "trying to merge"
-    git checkout "$sequence_origin"
-    git pull
-    git merge --no-commit origin/"$workinghead" || broke_on "merging $workinghead into $sequence_origin"
-    eval "$2" && passed_on "merge" || broke_on "testing merge"
+    git checkout --detach "$merge_target"
+    git merge --no-commit "$workinghead" || broke_on "merging $workinghead into $merge_target"
+    eval "$build_cmd" && passed_on "0" "merge" || broke_on "testing merge"
 fi
 
 if [ $status -eq 0 ]; then
-    tput setaf 2
+    tput bold;tput setaf 2
     echo "Integration OK"
     tput sgr0
 else

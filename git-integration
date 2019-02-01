@@ -62,10 +62,10 @@ workinghead=$(git symbolic-ref HEAD 2> /dev/null | cut -b 12-)
 PRIVATE_BUILD=$(git rev-parse --show-toplevel)/.privatebuild
 
 if [ ! -d "$PRIVATE_BUILD" ]; then
-  git worktree add --detach "$PRIVATE_BUILD">/dev/null
+  git worktree add -f --detach "$PRIVATE_BUILD">/dev/null || exit 1
 fi
 
-cd "$PRIVATE_BUILD"
+cd "$PRIVATE_BUILD" || exit 1
 git clean -df
 
 already_passed() {
@@ -128,3 +128,4 @@ else
 fi
 
 cd - >/dev/null
+git worktree remove -f .privatebuild

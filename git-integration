@@ -17,32 +17,35 @@ cat <<EOF
 EOF
 }
 
-while getopts "c:hm:o:" opt; do
-  case $opt in
-    c)
-      build_cmd="$OPTARG"
-      ;;
-    h)
-      usage
-      exit 0
-      ;;
-    m)
-        try_merge=1
-        merge_target="$OPTARG"
-      ;;
-    o)
-      sequence_origin="$OPTARG"
-      ;;
-    :)
-      echo "Option -$OPTARG requires an argument." >&2
-      usage
-      exit 1
-      ;;
-    \?)
-      usage
-      exit 1
-      ;;
-  esac
+while getopts "t:c:hm:o:" opt; do
+    case $opt in
+        t)
+            tag="$OPTARG"
+            ;;
+        c)
+            build_cmd="$OPTARG"
+            ;;
+        h)
+            usage
+            exit 0
+            ;;
+        m)
+            try_merge=1
+            merge_target="$OPTARG"
+            ;;
+        o)
+            sequence_origin="$OPTARG"
+            ;;
+        :)
+            echo "Option -$OPTARG requires an argument." >&2
+            usage
+            exit 1
+            ;;
+        \?)
+            usage
+            exit 1
+            ;;
+    esac
 done
 
 [ -n "$build_cmd" ] || build_cmd=$(git config integration.cmd)
@@ -100,13 +103,22 @@ new_test() {
     return $?
 }
 
+t=`echo "$build_cmd" | git hash-object --stdin`
+status=0
+
+if [ -n "$tag" ]
+then
+    tree_ver=`git rev-parse "${tag}^{tree}"`
+    commit_title=$(git log --oneline -1 ${tag})
+    passed_on $tree_ver "$commit_title"
+    exit 0
+fi
+
 sequence_exclude=$(for s in $sequence_origin; do echo -n "^${s} "; done)
 echo "Testing $build_cmd"
 tput setaf 3
 echo "on ${sequence_exclude} ${workinghead}"
 tput sgr0
-t=`echo "$build_cmd" | git hash-object --stdin`
-status=0
 for v in $(git rev-list --reverse ${sequence_exclude} ${workinghead})
 do
     tree_ver=`git rev-parse "$v^{tree}"`
